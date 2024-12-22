@@ -33,6 +33,9 @@ htmlcov/
 .env.local
 .env.*.local
 
+# Jupyter Notebook
+.ipynb_checkpoints
+
 # Logs
 *.log
 logs/
