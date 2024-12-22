@@ -102,3 +102,111 @@ class AttentionProbe(nn.Module):
         
         plt.tight_layout()
         return fig
+    
+
+class CounterfactualAttentionProbe(AttentionProbe):
+    def __init__(self, bert_model):
+        super().__init__(bert_model)
+        
+    def compare_statements(self, original_text, counterfactual_text):
+        """
+        Compare attention patterns between original and counterfactual statements
+        
+        Args:
+            original_text (str): The original statement
+            counterfactual_text (str): The counterfactual version
+        
+        Returns:
+            tuple: Original and counterfactual tokens and attention data
+        """
+        # Process both statements
+        orig_tokens, orig_attention = self.forward(original_text)
+        cf_tokens, cf_attention = self.forward(counterfactual_text)
+        
+        return {
+            'original': {'tokens': orig_tokens, 'attention': orig_attention},
+            'counterfactual': {'tokens': cf_tokens, 'attention': cf_attention}
+        }
+    
+    def visualize_attention_diff(self, layer_idx, head_idx, orig_data, cf_data):
+        """
+        Visualize the difference in attention patterns between original and counterfactual
+        
+        Args:
+            layer_idx (int): Index of the layer to analyze
+            head_idx (int): Index of the attention head to analyze
+            orig_data (dict): Original statement data
+            cf_data (dict): Counterfactual statement data
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(20, 16))
+        
+        # Original attention patterns
+        orig_attn = orig_data['attention'][layer_idx]['attention_probs'][0, head_idx].numpy()
+        orig_values = orig_data['attention'][layer_idx]['attention_values'][0, head_idx].numpy()
+        orig_tokens = orig_data['tokens']
+        
+        # Counterfactual attention patterns
+        cf_attn = cf_data['attention'][layer_idx]['attention_probs'][0, head_idx].numpy()
+        cf_values = cf_data['attention'][layer_idx]['attention_values'][0, head_idx].numpy()
+        cf_tokens = cf_data['tokens']
+        
+        # Plot original attention
+        sns.heatmap(orig_attn, xticklabels=orig_tokens, yticklabels=orig_tokens,
+                   ax=axes[0,0], cmap='viridis')
+        axes[0,0].set_title(f'Original Statement\nAttention Weights')
+        
+        # Plot counterfactual attention
+        sns.heatmap(cf_attn, xticklabels=cf_tokens, yticklabels=cf_tokens,
+                   ax=axes[0,1], cmap='viridis')
+        axes[0,1].set_title(f'Counterfactual Statement\nAttention Weights')
+        
+        # Plot original value-weighted attention
+        orig_similarity = cosine_similarity(orig_values)
+        sns.heatmap(orig_similarity, xticklabels=orig_tokens, yticklabels=orig_tokens,
+                   ax=axes[1,0], cmap='viridis')
+        axes[1,0].set_title(f'Original Statement\nValue-Weighted Attention')
+        
+        # Plot counterfactual value-weighted attention
+        cf_similarity = cosine_similarity(cf_values)
+        sns.heatmap(cf_similarity, xticklabels=cf_tokens, yticklabels=cf_tokens,
+                   ax=axes[1,1], cmap='viridis')
+        axes[1,1].set_title(f'Counterfactual Statement\nValue-Weighted Attention')
+        
+        plt.suptitle(f'Layer {layer_idx} Head {head_idx}\nAttention Pattern Comparison', y=1.02)
+        plt.tight_layout()
+        return fig
+    
+    def compute_attention_differences(self, layer_idx, head_idx, orig_data, cf_data):
+        """
+        Compute statistical differences between original and counterfactual attention patterns
+        
+        Args:
+            layer_idx (int): Index of the layer to analyze
+            head_idx (int): Index of the attention head to analyze
+            orig_data (dict): Original statement data
+            cf_data (dict): Counterfactual statement data
+            
+        Returns:
+            dict: Dictionary containing various difference metrics
+        """
+        # Get attention patterns
+        orig_attn = orig_data['attention'][layer_idx]['attention_probs'][0, head_idx]
+        cf_attn = cf_data['attention'][layer_idx]['attention_probs'][0, head_idx]
+        
+        # Get value-weighted patterns
+        orig_values = orig_data['attention'][layer_idx]['attention_values'][0, head_idx]
+        cf_values = cf_data['attention'][layer_idx]['attention_values'][0, head_idx]
+        
+        # Compute differences
+        attn_diff = {
+            'max_attention_diff': torch.max(torch.abs(orig_attn - cf_attn)).item(),
+            'mean_attention_diff': torch.mean(torch.abs(orig_attn - cf_attn)).item(),
+            'attention_pattern_correlation': torch.corrcoef(
+                torch.stack([orig_attn.flatten(), cf_attn.flatten()])
+            )[0,1].item(),
+            'value_output_correlation': torch.corrcoef(
+                torch.stack([orig_values.flatten(), cf_values.flatten()])
+            )[0,1].item()
+        }
+        
+        return attn_diff
