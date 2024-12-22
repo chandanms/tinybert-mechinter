@@ -90,25 +90,6 @@ The visualization includes four heatmaps:
    - Low attention_pattern_correlation (<0.7) suggests substantial pattern reorganization
    - Discrepancies between value_output_correlation and attention_pattern_correlation indicate different semantic processing
 
-## Architecture
-
-### TinyBertModel
-Base class for loading and managing the BERT model:
-- Handles model initialization
-- Provides inference capabilities
-- Exposes model architecture information
-
-### AttentionProbe
-Core probing functionality:
-- Captures intermediate attention computations
-- Implements visualization for attention patterns
-- Handles value matrix transformations
-
-### CounterfactualAttentionProbe
-Extends AttentionProbe with counterfactual analysis:
-- Compares attention patterns between statement pairs
-- Provides statistical metrics for differences
-- Visualizes comparative attention patterns
 
 ## References
 
