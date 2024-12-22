@@ -1,5 +1,9 @@
 from model import TinyBertModel
+from visualize import AttentionVisualizer
+import torch
 
-model = TinyBertModel()
+tiny_bert = TinyBertModel()
 
-analyzer.print_model()
+visualizer = AttentionVisualizer(tiny_bert)
+
+visualizer.visualize_layer("The cat sat on the mat.", 0)
