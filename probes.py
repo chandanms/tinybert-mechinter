@@ -1,9 +1,9 @@
-from torch import nn
 import torch
-
+from torch import nn
+import numpy as np
+from typing import List, Dict, Tuple
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
 
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -196,6 +196,8 @@ class CounterfactualAttentionProbe(AttentionProbe):
         # Get value-weighted patterns
         orig_values = orig_data['attention'][layer_idx]['attention_values'][0, head_idx]
         cf_values = cf_data['attention'][layer_idx]['attention_values'][0, head_idx]
+
+        ## TO DO: Figure out a way to compare attention differences for different sentence sizes
         
         # Compute differences
         attn_diff = {
@@ -210,3 +212,97 @@ class CounterfactualAttentionProbe(AttentionProbe):
         }
         
         return attn_diff
+
+
+class NegationProbe(CounterfactualAttentionProbe):
+    def __init__(self, bert_model):
+        super().__init__(bert_model)
+        self.negation_tokens = {'not', 'never', "n't", 'no', 'neither', 'nor'}
+        
+    def analyze_negation_pairs(self, sentence_pairs: List[Tuple[str, str]]):
+        """
+        Analyze multiple pairs of sentences with and without negation.
+        
+        Args:
+            sentence_pairs: List of (original, negated) sentence pairs
+            
+        Returns:
+            Dict containing analysis results for each layer and head
+        """
+        results = {}
+        
+        for layer_idx in range(self.num_layers):
+            results[layer_idx] = {}
+            for head_idx in range(self.num_heads):
+                head_results = []
+                
+                for orig, neg in sentence_pairs:
+                    comparison = self.compare_statements(orig, neg)
+                    
+                    # Track negation token attention
+                    neg_attention = self._compute_negation_attention(
+                        layer_idx, head_idx,
+                        comparison['counterfactual']['tokens'],
+                        comparison['counterfactual']['attention']
+                    )
+                    
+                    head_results.append(neg_attention)
+                
+                # Aggregate metrics across all pairs
+                results[layer_idx][head_idx] = {
+                    metric: np.mean([r[metric] for r in head_results])
+                    for metric in head_results[0].keys()
+                }
+                
+        return results
+    
+    def _compute_negation_attention(self, layer_idx: int, head_idx: int, 
+                                  tokens: List[str], attention_data: List[Dict]) -> Dict:
+        """
+        Compute attention patterns specifically related to negation tokens.
+        """
+        # Find positions of negation tokens
+        neg_positions = [i for i, t in enumerate(tokens) 
+                        if any(neg in t.lower() for neg in self.negation_tokens)]
+        
+        if not neg_positions:
+            return {'neg_token_attention': 0.0, 'neg_token_influence': 0.0}
+        
+        # Get attention weights for this layer/head
+        attn_weights = attention_data[layer_idx]['attention_probs'][0, head_idx]
+        
+        # Average attention from negation tokens to all other tokens
+        neg_attention = torch.mean(attn_weights[neg_positions, :]).item()
+        
+        # Average attention to negation tokens from all other tokens
+        neg_influence = torch.mean(attn_weights[:, neg_positions]).item()
+        
+        return {
+            'neg_token_attention': neg_attention,
+            'neg_token_influence': neg_influence
+        }
+    
+    def visualize_negation_head_rankings(self, results: Dict):
+        """
+        Visualize which heads appear most responsive to negation.
+        """
+        # Create matrices for different metrics
+        metrics = ['neg_token_attention', 'neg_token_influence', 
+                  'attention_pattern_correlation']
+        
+        fig, axes = plt.subplots(len(metrics), 1, figsize=(12, 4*len(metrics)))
+        
+        for idx, metric in enumerate(metrics):
+            data = np.zeros((self.num_layers, self.num_heads))
+            
+            for layer in range(self.num_layers):
+                for head in range(self.num_heads):
+                    data[layer, head] = results[layer][head][metric]
+            
+            sns.heatmap(data, ax=axes[idx], cmap='viridis',
+                       xticklabels=[f'Head {i}' for i in range(self.num_heads)],
+                       yticklabels=[f'Layer {i}' for i in range(self.num_layers)])
+            axes[idx].set_title(f'{metric.replace("_", " ").title()}')
+        
+        plt.tight_layout()
+        return fig
