@@ -51,7 +51,6 @@ class AttentionProbe(nn.Module):
 
         # Compute attention output (this is what we want to capture)
         attention_output = torch.matmul(attention_probs, value)
-        print (attention_probs.shape, value.shape, attention_output.shape)
         
         # Store both probabilities and value-weighted outputs
         self.attention_with_values.append({
@@ -214,7 +213,7 @@ class CounterfactualAttentionProbe(AttentionProbe):
         return attn_diff
 
 
-class NegationProbe(CounterfactualAttentionProbe):
+class NegationProbe(AttentionProbe):
     def __init__(self, bert_model):
         super().__init__(bert_model)
         self.negation_tokens = {'not', 'never', "n't", 'no', 'neither', 'nor'}
@@ -230,30 +229,45 @@ class NegationProbe(CounterfactualAttentionProbe):
             Dict containing analysis results for each layer and head
         """
         results = {}
-        
+        max_len = max(len(self.forward(neg)[0]) for _, neg in sentence_pairs)
         for layer_idx in range(self.num_layers):
             results[layer_idx] = {}
             for head_idx in range(self.num_heads):
-                head_results = []
+                head_from_neg = []
+                head_to_neg = []                
                 
-                for orig, neg in sentence_pairs:
-                    comparison = self.compare_statements(orig, neg)
+                for _, neg in sentence_pairs:
+                    neg_tokens, neg_attention = self.forward(neg)
                     
                     # Track negation token attention
-                    neg_attention = self._compute_negation_attention(
+                    neg_attention, neg_influence = self._compute_negation_attention(
                         layer_idx, head_idx,
-                        comparison['counterfactual']['tokens'],
-                        comparison['counterfactual']['attention']
+                        neg_tokens,
+                        neg_attention
                     )
+
+                    if isinstance(neg_attention, torch.Tensor):
+                        neg_attention = neg_attention.cpu().numpy()
+                        neg_influence = neg_influence.cpu().numpy()
                     
-                    head_results.append(neg_attention)
+                    padded_attn = np.zeros(max_len)
+                    padded_infl = np.zeros(max_len)
+
+                    padded_attn[:len(neg_attention)] = neg_attention
+                    padded_infl[:len(neg_influence)] = neg_influence
+
+                    neg_attention = padded_attn
+                    neg_influence = padded_infl
+
+                    head_from_neg.append(neg_attention)
+                    head_to_neg.append(neg_influence)
                 
                 # Aggregate metrics across all pairs
                 results[layer_idx][head_idx] = {
-                    metric: np.mean([r[metric] for r in head_results])
-                    for metric in head_results[0].keys()
-                }
-                
+                    'from_neg_to_tokens': np.mean(head_from_neg, axis=0),
+                    'to_neg_from_tokens': np.mean(head_to_neg, axis=0)
+                }                
+        
         return results
     
     def _compute_negation_attention(self, layer_idx: int, head_idx: int, 
@@ -264,23 +278,28 @@ class NegationProbe(CounterfactualAttentionProbe):
         # Find positions of negation tokens
         neg_positions = [i for i, t in enumerate(tokens) 
                         if any(neg in t.lower() for neg in self.negation_tokens)]
-        
         if not neg_positions:
-            return {'neg_token_attention': 0.0, 'neg_token_influence': 0.0}
+            # Return zero tensors if no negation found
+            zero_attn = torch.zeros(len(tokens))
+            return zero_attn, zero_attn
         
         # Get attention weights for this layer/head
         attn_weights = attention_data[layer_idx]['attention_probs'][0, head_idx]
         
-        # Average attention from negation tokens to all other tokens
-        neg_attention = torch.mean(attn_weights[neg_positions, :]).item()
+        ## TO DO: Investigate if taking average attention hides any important details
+        # # Average attention from negation tokens to all other tokens
+        # neg_attention = torch.mean(attn_weights[neg_positions, :]).item()
         
-        # Average attention to negation tokens from all other tokens
-        neg_influence = torch.mean(attn_weights[:, neg_positions]).item()
-        
-        return {
-            'neg_token_attention': neg_attention,
-            'neg_token_influence': neg_influence
-        }
+        # # Average attention to negation tokens from all other tokens
+        # neg_influence = torch.mean(attn_weights[:, neg_positions]).item()
+
+        # Attention from negation token to all other tokens
+        neg_attention = attn_weights[neg_positions, :][0]
+
+        neg_influence = attn_weights[:, neg_positions].reshape(-1)
+
+        return neg_attention, neg_influence
+    
     
     def visualize_negation_head_rankings(self, results: Dict):
         """
