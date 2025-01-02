@@ -1,6 +1,6 @@
-# Mechanistic interpretability of TinyBERT
+# Mechanistic interpretability of tiny models
 
-This project provides tools for analyzing BERT attention mechanisms using counterfactual statements. It enables detailed investigation of how attention patterns and value transformations change when semantically related but meaningfully different statements are processed.
+This project provides tools for analyzing attention mechanisms. It enables detailed investigation of how attention patterns and value transformations change when semantically related but meaningfully different statements are processed.
 
 Please note that this project is not complete and only my scratchbook to understand the mechanisms better
 
@@ -20,41 +20,63 @@ Please note that this project is not complete and only my scratchbook to underst
 - Seaborn
 - Matplotlib
 - NumPy
-- TinyBERT (prajjwal1/bert-tiny)
 
-## Usage
+## Negation analysis
 
-### Basic Model Setup
+This investigates how transformer-based language models process negation through attention mechanism analysis. Using a custom AttentionProbe class, we visualize and analyze attention patterns and value-weighted attention across different layers and heads. The model used here is TinyBert (https://huggingface.co/prajjwal1/bert-tiny)
 
-```python
-from model import TinyBertModel
-from probing import AttentionProbe, CounterfactualAttentionProbe
+### Method
 
-# Initialize the model
-model = TinyBertModel()
+The analysis uses a custom AttentionProbe class that:
 
-# Print model architecture
-model.print_model_info()
-```
+1. Extracts attention weights and value matrices from transformer layers
+2. Computes value-weighted attention patterns
+3. Visualizes results using heatmaps for both raw attention and value-weighted attention
 
-### Analyzing Attention Patterns
+The analysis is done for multiple negation statements and are observed as statistical object to find patters,
 
-```python
-# Define statement pairs
-statements = (
-    "The cat chased the mouse",
-    "The mouse chased the cat"
-)
+### Key findings
 
-# Analyze specific layer and head
-layer_idx = 0
-head_idx = 0
+1. Layer specialization:
 
-# Run analysis
-fig, differences = analyze_counterfactual_pair(model, statements, layer_idx, head_idx)
-```
+- Layer 0: Focuses on local token relationships
+- Layer 1: Handles broader semantic connections
 
-## Understanding the Output
+
+2. Negation processing:
+
+- Strong bidirectional attention between negation words and affected terms
+- Distinct value-weighted patterns in negation contexts
+
+### Results
+
+- Raw attention weights: Shows direct attention patterns between tokens
+- Value-weighted attention: Reveals semantic relationships after value transformation
+- Analyzed across multiple layers and attention heads
+
+#### Layer 0 Head 0
+![Layer 0 Head 0](./images/layer0_head0.png)
+Left: Raw attention weights showing local token relationships
+Right: Value-weighted attention revealing semantic connections
+
+#### Layer 0 Head 1
+![Layer 0 Head 1](./images/layer0_head1.png)
+Left: Raw attention with broader distribution
+Right: Value-weighted patterns showing cross-token semantic relationships
+
+#### Layer 1 Head 0
+![Layer 1 Head 0](./images/layer1_head0.png)
+Left: Raw attention focused on syntactic relationships
+Right: Value-weighted attention showing refined semantic connections
+
+#### Layer 1 Head 1
+![Layer 1 Head 1](./images/layer1_head1.png)
+Left: Raw attention with strong endpoint connections
+Right: Value-weighted attention showing integrated semantic relationships
+
+## Counter factual analysis
+
+Analysis of counter factual statements in a DistillBert model
 
 ### Visualization Components
 
@@ -71,24 +93,6 @@ The visualization includes four heatmaps:
 - `attention_pattern_correlation`: Correlation between original and counterfactual attention patterns
 - `value_output_correlation`: Correlation between original and counterfactual value-weighted outputs
 
-### Interpreting Results
-
-#### Significant Patterns to Look For:
-
-1. **Raw Attention Weight Changes**
-   - Strong attention bands shifting positions
-   - Changes in diagonal patterns (self-attention)
-   - Shifts at syntactically important positions
-
-2. **Value-Weighted Attention Changes**
-   - Changes in semantic clustering
-   - Alterations in relationship strengths between key words
-   - Preservation or disruption of semantic relationships
-
-3. **Statistical Indicators**
-   - High max_attention_diff (>0.3) indicates significant local changes
-   - Low attention_pattern_correlation (<0.7) suggests substantial pattern reorganization
-   - Discrepancies between value_output_correlation and attention_pattern_correlation indicate different semantic processing
 
 
 ## References
