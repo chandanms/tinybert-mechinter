@@ -33,7 +33,7 @@ The analysis uses a custom AttentionProbe class that:
 2. Computes value-weighted attention patterns
 3. Visualizes results using heatmaps for both raw attention and value-weighted attention
 
-The analysis is done for multiple negation statements and are observed as statistical object to find patters,
+The analysis is done for multiple negation statements and are observed as statistical objects to find patterns and circuits.
 
 ### Key findings
 
@@ -47,6 +47,7 @@ The analysis is done for multiple negation statements and are observed as statis
 
 - Strong bidirectional attention between negation words and affected terms
 - Distinct value-weighted patterns in negation contexts
+- Diffusion of value-weighted vectors around the negation term
 
 ### Results
 
